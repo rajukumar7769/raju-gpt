@@ -1,0 +1,224 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Settings - RAJU-GPT{% endblock %}
+
+{% block content %}
+<style>
+  body {
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    font-family: 'Poppins', sans-serif;
+    color: #fff;
+    margin: 0;
+    padding: 0;
+  }
+
+  .settings-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 90vh;
+    padding: 2rem 1rem;
+  }
+
+  .settings-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 700px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.4);
+  }
+
+  .settings-card h2 {
+    text-align: center;
+    color: #00f5c9;
+    margin-bottom: 1.5rem;
+  }
+
+  .form-label {
+    color: #ddd;
+  }
+
+  /* Input fields styling */
+  .form-control {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(0, 255, 200, 0.4);
+    color: #fff;
+    transition: background 0.3s ease, border-color 0.3s ease;
+  }
+
+  .form-control::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .form-control:focus {
+    background: rgba(0, 0, 0, 0.35);
+    border-color: rgba(0, 255, 200, 0.4);
+    color: #fff;
+    box-shadow: none;
+    outline: none;
+  }
+
+  /* Remove white background from readonly/disabled */
+  .form-control:disabled,
+  .form-control[readonly] {
+    background-color: rgba(0, 0, 0, 0.35) !important;
+    opacity: 1;
+    color: #fff;
+    border-color: rgba(0, 255, 200, 0.4);
+  }
+
+  .input-group .btn-outline-secondary {
+    border: none;
+    color: #00f5c9;
+    background: transparent;
+  }
+
+  .text-danger, .text-primary {
+    color: #00c3ff !important;
+  }
+
+  .btn-primary {
+    background-color: #00f5c9;
+    border: none;
+    color: #000;
+  }
+
+  .btn-primary:hover {
+    background-color: #00dac3;
+  }
+
+  .alert {
+    border-radius: 10px;
+    font-size: 0.95rem;
+  }
+
+  hr {
+    border-color: rgba(255,255,255,0.15);
+  }
+  footer {
+    background: rgba(255, 255, 255, 0.05);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    color: #ccc;
+    text-align: center;
+    padding: 1rem 0;
+    margin-top: 3rem;
+    font-size: 0.9rem;
+    border-radius: 12px 12px 0 0;
+  }
+  
+  @media (max-width: 768px) {
+    .settings-card {
+      max-width: 95%;
+      padding: 1.5rem;
+    }
+  }
+</style>
+
+<div class="settings-wrapper">
+  <div class="settings-card">
+    <h2>Account Settings</h2>
+
+    <!-- MESSAGES BLOCK -->
+    {% if messages %}
+    <div>
+        {% for message in messages %}
+        <div class="alert 
+            {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{% url 'update_profile' %}">
+      {% csrf_token %}
+
+      <!-- Personal Info -->
+      <h5 class="mb-3 text-primary">Personal Information</h5>
+
+      <div class="mb-3">
+        <label for="username" class="form-label">Username</label>
+        <input type="text" class="form-control" id="username" value="{{ user.username }}" readonly>
+      </div>
+
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label for="first_name" class="form-label">First Name</label>
+          <input type="text" class="form-control" id="first_name" value="{{ user.first_name }}" readonly>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label for="last_name" class="form-label">Last Name</label>
+          <input type="text" class="form-control" id="last_name" value="{{ user.last_name }}" readonly>
+        </div>
+      </div>
+
+      <hr />
+
+      <!-- Password Section -->
+      <h5 class="mb-3 text-danger">Change Password</h5>
+
+      <div class="mb-3">
+        <label for="old_password" class="form-label">Old Password</label>
+        <div class="input-group">
+          <input type="password" class="form-control" id="old_password" name="old_password" placeholder="Enter current password">
+          <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('old_password')">
+            <i class="bi bi-eye" id="toggle_old_password"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="new_password" class="form-label">New Password</label>
+        <div class="input-group">
+          <input type="password" class="form-control" id="new_password" name="new_password" placeholder="Enter new password">
+          <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('new_password')">
+            <i class="bi bi-eye" id="toggle_new_password"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="confirm_password" class="form-label">Confirm Password</label>
+        <div class="input-group">
+          <input type="password" class="form-control" id="confirm_password" name="confirm_password" placeholder="Confirm new password">
+          <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('confirm_password')">
+            <i class="bi bi-eye" id="toggle_confirm_password"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="text-end mt-4">
+        <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Password Toggle Script -->
+<script>
+  function togglePassword(id) {
+    const input = document.getElementById(id);
+    const icon = input.parentElement.querySelector("i");
+
+    if (input.type === "password") {
+      input.type = "text";
+      icon.classList.remove("bi-eye");
+      icon.classList.add("bi-eye-slash");
+    } else {
+      input.type = "password";
+      icon.classList.remove("bi-eye-slash");
+      icon.classList.add("bi-eye");
+    }
+  }
+</script>
+<!-- Footer -->
+<footer>
+  © {{ now|date:"Y" }} RAJU-GPT. All rights reserved.
+</footer>
+{% endblock %}

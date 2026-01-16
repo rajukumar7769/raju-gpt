@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: raju_gpt_web
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+      - ./LLm_models:/app/LLm_models
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+      - cache_volume:/app/django_cache
+    ports:
+      - \"8000:8000\"
+    env_file:
+      - .env
+    environment:
+      - DEBUG=True
+      - DJANGO_SETTINGS_MODULE=raju_gpt_proj.settings
+    restart: unless-stopped
+
+volumes:
+  static_volume:
+  media_volume:
+  cache_volume:

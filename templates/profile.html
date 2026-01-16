@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Profile - RAJU-GPT{% endblock %}
+
+{% block content %}
+<style>
+  body {
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    font-family: 'Poppins', sans-serif;
+    color: #fff;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+  footer {
+    background: rgba(255, 255, 255, 0.05);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    color: #ccc;
+    text-align: center;
+    padding: 1rem 0;
+    margin-top: 3rem;
+    font-size: 0.9rem;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .profile-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 90vh;
+    padding: 2rem 1rem;
+  }
+
+  .profile-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.4);
+  }
+
+  .profile-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .profile-header img {
+    border-radius: 50%;
+    border: 3px solid #00f5c9;
+    box-shadow: 0 0 10px #00f5c9;
+  }
+
+  .profile-header h3 {
+    margin-top: 1rem;
+    font-size: 1.5rem;
+    color: #00f5c9;
+  }
+
+  .profile-header p {
+    color: #ccc;
+    font-size: 0.95rem;
+  }
+
+  .profile-section h5 {
+    color: #00c3ff;
+    margin-bottom: 1rem;
+  }
+
+  .profile-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+  }
+
+  .profile-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.95rem;
+    color: #eaeaea;
+  }
+
+  @media (max-width: 768px) {
+    .profile-card {
+      max-width: 95%;
+      padding: 1.5rem;
+    }
+  }
+</style>
+
+<div class="profile-wrapper">
+  <div class="profile-card">
+    <div class="profile-header">
+      <img src="{% static 'media/my_pic.png' %}" alt="Profile Picture" width="120" height="120">
+      <h3>{{ user.get_full_name }}</h3>
+      <p>{{ user.email }}</p>
+    </div>
+
+    <hr style="border-color: rgba(255,255,255,0.15)" />
+
+    <div class="profile-section">
+      <h5>Account Details</h5>
+      <ul class="profile-list">
+        <li><strong>Username:</strong> <span>{{ user.username }}</span></li>
+        <li><strong>Date Joined:</strong> <span>{{ user.date_joined|date:"F j, Y" }}</span></li>
+        <li><strong>Last Login:</strong> <span>{{ user.last_login|date:"F j, Y, g:i a" }}</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+<!-- Footer -->
+<footer>
+  © {{ now|date:"Y" }} RAJU-GPT. All rights reserved.
+</footer>
+{% endblock %}

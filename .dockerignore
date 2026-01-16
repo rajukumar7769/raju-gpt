@@ -1,0 +1,40 @@
+# Ignore Python
+__pycache__/
+*.py[cod]
+*.pyc
+.Python
+myenv/
+venv/
+env/
+
+# Ignore Django
+db.sqlite3
+db.sqlite3-journal
+django_cache/
+*.log
+media/
+staticfiles/
+
+# Ignore environment
+.env
+
+# Ignore IDE
+.vscode/
+.idea/
+
+# Ignore OS
+.DS_Store
+Thumbs.db
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore backup files
+*_backup.py
+*_backup*.html
+
+# Keep requirements and configs
+!requirements*.txt
+!Dockerfile
+!docker-compose.yml

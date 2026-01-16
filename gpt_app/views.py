@@ -78,10 +78,9 @@ def get_model_and_tokenizer():
     model = AutoModelForCausalLM.from_pretrained(
                                                 model_id,
                                                 torch_dtype=torch.float32,
-                                                device_map="cpu",
                                                 trust_remote_code=True,
                                                 use_safetensors=True
-                                            )
+                                            ).to(device)
     
     print("✅ Model loaded successfully!")
     print("💾 Caching for future use...")

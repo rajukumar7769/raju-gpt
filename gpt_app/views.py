@@ -50,12 +50,17 @@ def get_model_and_tokenizer():
     
     print("🔍 Checking cache for model and tokenizer...")
     
-    # Check Django cache first
+    # Check global variables first (fastest)
+    if _tokenizer is not None and _model is not None:
+        print("✅ Using global cached model")
+        return _tokenizer, _model
+    
+    # Check Django cache
     tokenizer = cache.get("custom_tokenizer")
     model = cache.get("custom_model")
     
     if tokenizer is not None and model is not None:
-        print("✅ Using cached model")
+        print("✅ Using Django cached model")
         _tokenizer = tokenizer
         _model = model
         return tokenizer, model
@@ -151,10 +156,15 @@ def get_response(request):
         )
 
         try:
+            print(f"📨 Received message: {message}")
+            print(f"🔄 Getting model and tokenizer...")
+            
             # Lazy load model on first request
             tokenizer, model = get_model_and_tokenizer()
             
+            print(f"✅ Model ready. Tokenizing prompt...")
             inputs = tokenizer(prompt, return_tensors="pt").to(device)
+            print(f"✅ Tokenized. Generating response...")
 
             with torch.no_grad():
                 outputs = model.generate(
@@ -166,13 +176,23 @@ def get_response(request):
                     early_stopping=True
                 )
 
+            print(f"✅ Generated. Decoding response...")
             decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            print(f"✅ Decoded response length: {len(decoded)}")
 
-            # Optional: trim the prompt part out of the full decoded output
-            response = decoded[len(prompt):].strip()
+            # Extract just the response part (after the prompt)
+            if prompt in decoded:
+                response = decoded.split(prompt)[-1].strip()
+            else:
+                response = decoded[len(prompt):].strip()
+            
+            print(f"✅ Final response: {response[:100]}...")
 
         except Exception as e:
-            response = f"Error occurred: {str(e)}"
+            print(f"❌ Error in get_response: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            response = f"Error: {str(e)}"
 
         # Save the chat data to the database
         Chat_data.objects.create(user=request.user, user_message=message, bot_response=response)

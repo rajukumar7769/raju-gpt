@@ -39,7 +39,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #         cache.set("flan_t5_model", model, None)
 
 #     return tokenizer, model
-model_id = "LLm_models/custom_model"
+model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 def get_model_and_tokenizer():
     print("Checking cache for model and tokenizer...")
     tokenizer = cache.get("custom_tokenizer")
@@ -51,10 +51,9 @@ def get_model_and_tokenizer():
         tokenizer = AutoTokenizer.from_pretrained(model_id )
         model = AutoModelForCausalLM.from_pretrained(
                                                     model_id,
-                                                    torch_dtype=torch.float16,
-                                                    device_map="auto",
-                                                    load_in_4bit=True  # Requires bitsandbytes installed
-                                                ).to(device)
+                                                    torch_dtype=torch.float32,
+                                                    device_map="cpu"
+                                                )
 
         # Set them in Django cache
         cache.set("custom_tokenizer", tokenizer, None)  # No timeout

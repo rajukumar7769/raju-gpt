@@ -1,3 +1,12 @@
+---
+title: RAJU-GPT
+emoji: 🤖
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # RAJU-GPT - AI Chatbot with RAG
 
 A Django-based AI chatbot application using local LLM models (TinyLlama) with Retrieval Augmented Generation (RAG) via SerpAPI for real-time web search capabilities.

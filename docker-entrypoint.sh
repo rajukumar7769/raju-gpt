@@ -15,4 +15,4 @@ echo "Collecting static files..."
 python manage.py collectstatic --noinput --clear
 
 echo "=== Starting application ==="
-exec gunicorn raju_gpt_proj.wsgi:application --bind 0.0.0.0:7860 --workers 2 --timeout 120
+exec gunicorn raju_gpt_proj.wsgi:application --bind 0.0.0.0:7860 --workers 2 --timeout 600 --graceful-timeout 30

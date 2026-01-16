@@ -40,29 +40,65 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 #     return tokenizer, model
 model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+# Global variables for lazy loading
+_tokenizer = None
+_model = None
+
 def get_model_and_tokenizer():
-    print("Checking cache for model and tokenizer...")
+    global _tokenizer, _model
+    
+    print("🔍 Checking cache for model and tokenizer...")
+    
+    # Check Django cache first
     tokenizer = cache.get("custom_tokenizer")
     model = cache.get("custom_model")
     
-    print("Cached model:", tokenizer is not None, "Cached tokenizer:", model is not None)
-    if tokenizer is None or model is None:
-        print("Loading model for the first time...")
-        tokenizer = AutoTokenizer.from_pretrained(model_id )
-        model = AutoModelForCausalLM.from_pretrained(
-                                                    model_id,
-                                                    torch_dtype=torch.float32,
-                                                    device_map="cpu"
-                                                )
-
-        # Set them in Django cache
-        cache.set("custom_tokenizer", tokenizer, None)  # No timeout
-        cache.set("custom_model", model, None)
-
+    if tokenizer is not None and model is not None:
+        print("✅ Using cached model")
+        _tokenizer = tokenizer
+        _model = model
+        return tokenizer, model
+    
+    # Check global variables
+    if _tokenizer is not None and _model is not None:
+        print("✅ Using global model")
+        return _tokenizer, _model
+    
+    print("📥 Loading model for the first time (this may take 5-10 minutes)...")
+    print(f"📦 Model: {model_id}")
+    print("⏳ Step 1/2: Loading tokenizer...")
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    print("✅ Tokenizer loaded!")
+    
+    print("⏳ Step 2/2: Downloading and loading model (~2.2GB)...")
+    print("💡 This is downloading from HuggingFace Hub - please wait...")
+    
+    model = AutoModelForCausalLM.from_pretrained(
+                                                model_id,
+                                                torch_dtype=torch.float32,
+                                                device_map="cpu",
+                                                trust_remote_code=True,
+                                                use_safetensors=True
+                                            )
+    
+    print("✅ Model loaded successfully!")
+    print("💾 Caching for future use...")
+    
+    # Cache in Django
+    cache.set("custom_tokenizer", tokenizer, None)
+    cache.set("custom_model", model, None)
+    
+    # Store globally
+    _tokenizer = tokenizer
+    _model = model
+    
+    print("🎉 Model ready!")
     return tokenizer, model
 
-# Initialize the model and tokenizer globally
-tokenizer, model = get_model_and_tokenizer()
+# Don't load at startup - lazy load on first request
+# tokenizer, model = get_model_and_tokenizer()
 
 # Home route
 @login_required(login_url='login')
@@ -78,7 +114,10 @@ def index(request):
 
 # Function to fetch real-time context
 def search_web(query):
-    serpapi_key = "your_serpapi_key_here"  # Replace with your key
+    """
+    Fetch real-time search results from SerpAPI.
+    Returns formatted snippets from top 3 results or error message.
+    """
     url = "https://serpapi.com/search"
     params = {
         "q": query,
@@ -89,9 +128,10 @@ def search_web(query):
     try:
         res = requests.get(url, params=params, timeout=8).json()
         snippets = [r.get("snippet", "") for r in res.get("organic_results", [])]
-        return "\n".join(snippets)
+        return "\n".join(snippets) if snippets else "(No search results found)"
     except Exception as e:
-        return f"(Web search failed: {e})"
+        print(f"⚠️ Web search error: {e}")
+        return f"(Web search unavailable)"
 
 @csrf_exempt
 @login_required
@@ -112,6 +152,9 @@ def get_response(request):
         )
 
         try:
+            # Lazy load model on first request
+            tokenizer, model = get_model_and_tokenizer()
+            
             inputs = tokenizer(prompt, return_tensors="pt").to(device)
 
             with torch.no_grad():

@@ -53,8 +53,8 @@ USER appuser
 EXPOSE 7860
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c \"import requests; requests.get('http://localhost:7860/').raise_for_status()\" || exit 1
+    CMD python -c "import requests; requests.get('http://localhost:7860/').raise_for_status()" || exit 1
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
-CMD [\"gunicorn\", \"raju_gpt_proj.wsgi:application\", \"--bind\", \"0.0.0.0:7860\", \"--workers\", \"2\", \"--timeout\", \"120\"]
+CMD ["gunicorn", "raju_gpt_proj.wsgi:application", "--bind", "0.0.0.0:7860", "--workers", "2", "--timeout", "120"]

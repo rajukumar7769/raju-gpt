@@ -1,8 +1,6 @@
 Django==4.2.20
 torch==2.0.0
 transformers==4.36.0
-accelerate==1.6.0
-bitsandbytes==0.45.5
 huggingface-hub[hf_xet]==0.30.2
 requests==2.31.0
 reportlab==4.0.0

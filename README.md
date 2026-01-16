@@ -5,6 +5,7 @@ colorFrom: blue
 colorTo: green
 sdk: docker
 pinned: false
+suggested_hardware: cpu-basic
 ---
 
 # RAJU-GPT - AI Chatbot with RAG

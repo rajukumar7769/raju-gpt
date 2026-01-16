@@ -25,7 +25,8 @@ A Django-based AI chatbot application using local LLM models (TinyLlama) with Re
 ### 1. Clone the repository
 
 ```bash
-cd f:\BBSBEC\LLM_Project\LLM_project\raju_gpt_proj
+git clone https://github.com/rajukumar7769/raju-gpt.git
+cd raju-gpt
 ```
 
 ### 2. Create and activate virtual environment

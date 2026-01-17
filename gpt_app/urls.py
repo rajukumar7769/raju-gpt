@@ -5,6 +5,7 @@ urlpatterns = [
     path('', views.login_user, name='login'),  # root URL now shows login page
     path('index/', views.index, name='index'),  # index page moved to /index/
     path("get-response/", views.get_response, name="get_response"),
+    path("stream-response/", views.stream_response, name="stream_response"),  # Phase 2.1: Streaming
     path("chat-history/", views.get_chat_history, name="get_chat_history"),
     path("export-chat-as-pdf/", views.export_chat_as_pdf, name="export_chat_as_pdf"),
     path("export-chat-as-json/", views.export_chat_as_json, name="export_chat_as_json"),

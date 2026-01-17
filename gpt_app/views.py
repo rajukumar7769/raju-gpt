@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_protect
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, StreamingHttpResponse
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -337,6 +337,159 @@ def get_response(request):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 
+
+
+# ============================================================================
+# STREAMING RESPONSE ENDPOINT (Phase 2.1)
+# ============================================================================
+
+@csrf_protect
+@login_required
+def stream_response(request):
+    """
+    Stream AI response token-by-token using Server-Sent Events (SSE)
+    """
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            message = data.get("message", "").strip()
+            
+            if not message:
+                return JsonResponse({'error': 'Message cannot be empty'}, status=400)
+            if len(message) > 1000:
+                message = message[:1000]
+            
+            # Rate limiting
+            if _rate_limited(request.user.id):
+                return JsonResponse({'error': 'Too many requests. Please wait.'}, status=429)
+            
+            def event_generator():
+                """Generator function that yields SSE formatted events"""
+                try:
+                    print(f"\n{'='*70}")
+                    print(f"📊 STREAMING RESPONSE STARTED")
+                    print(f"{'='*70}")
+                    
+                    # Get web context
+                    context = search_web(message)
+                    
+                    # Get user preferences
+                    try:
+                        profile = request.user.profile
+                        system_prompt = profile.system_prompt
+                        temperature = profile.temperature
+                        top_p = profile.top_p
+                    except:
+                        system_prompt = "You are a helpful, informative, and polite assistant."
+                        temperature = 0.7
+                        top_p = 0.9
+                    
+                    prompt = (
+                        f"{system_prompt}\n\n"
+                        "Use the following web context to answer the user's query.\n\n"
+                        f"Context:\n{context}\n\n"
+                        f"Question: {message}\n\n"
+                        "Answer:"
+                    )
+                    
+                    # Load model
+                    tokenizer, model = get_model_and_tokenizer()
+                    
+                    # Tokenize
+                    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+                    
+                    # Generate tokens one by one
+                    print(f"🔄 Starting token generation...")
+                    with torch.no_grad():
+                        outputs = model.generate(
+                            **inputs,
+                            max_new_tokens=300,
+                            do_sample=True,
+                            temperature=temperature,
+                            top_p=top_p,
+                            repetition_penalty=1.2,
+                            num_return_sequences=1,
+                            pad_token_id=tokenizer.eos_token_id,
+                            output_scores=False,
+                        )
+                    
+                    # Decode and stream tokens
+                    full_response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                    
+                    # Extract response (remove prompt)
+                    if prompt in full_response:
+                        response_text = full_response.split(prompt)[-1].strip()
+                    else:
+                        response_text = full_response[len(prompt):].strip() if len(full_response) > len(prompt) else full_response.strip()
+                    
+                    response_text = response_text[:1000]
+                    
+                    # Stream tokens to client
+                    token_count = 0
+                    for token in response_text.split():
+                        yield f"data: {json.dumps({'token': token, 'type': 'token'})}\n\n"
+                        token_count += 1
+                    
+                    print(f"✅ Streamed {token_count} tokens")
+                    
+                    # Save to database
+                    session_id = timezone.now().strftime('%Y-%m-%d')
+                    
+                    from .models import Conversation
+                    try:
+                        conv = Conversation.objects.filter(user=request.user).latest('updated_at')
+                        if conv.updated_at.date() != timezone.now().date():
+                            conv = Conversation.objects.create(
+                                user=request.user,
+                                title=message[:50] + "..." if len(message) > 50 else message
+                            )
+                    except Conversation.DoesNotExist:
+                        conv = Conversation.objects.create(
+                            user=request.user,
+                            title=message[:50] + "..." if len(message) > 50 else message
+                        )
+                    
+                    chat = Chat_data.objects.create(
+                        user=request.user,
+                        user_message=message,
+                        bot_response=response_text,
+                        session_id=session_id,
+                        conversation=conv
+                    )
+                    
+                    if conv.messages.count() == 1:
+                        conv.title = message[:100] if len(message) <= 100 else message[:97] + "..."
+                        conv.save()
+                    
+                    # Send completion event with metadata
+                    yield f"data: {json.dumps({'type': 'done', 'message_id': chat.id, 'conversation_id': conv.id})}\n\n"
+                    
+                    print(f"✅ Streaming completed successfully")
+                    print(f"{'='*70}\n")
+                    
+                except Exception as e:
+                    print(f"❌ Streaming error: {str(e)}")
+                    yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            
+            # Return streaming response
+            response = StreamingHttpResponse(
+                event_generator(),
+                content_type='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'X-Accel-Buffering': 'no',
+                }
+            )
+            response['Access-Control-Allow-Origin'] = '*'
+            return response
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON format'}, status=400)
+        except Exception as e:
+            print(f"❌ Stream endpoint error: {str(e)}")
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'POST required'}, status=400)
 
 
 def _rate_limited(user_id: int, limit: int = 20, window_seconds: int = 300) -> bool:

@@ -141,6 +141,11 @@
       height: 40px;
       border-radius: 50%;
       object-fit: cover;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 245, 201, 0.1);
+      border: 2px solid rgba(0, 245, 201, 0.3);
     }
 
     .typing-animation {
@@ -246,7 +251,7 @@
       <!-- Profile Dropdown -->
       <div class="dropdown">
         <button class="btn border-0 p-0 profile-button dropdown-toggle" type="button" id="profileDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-          <img src="{% static 'media/my_pic.png' %}" alt="Profile" class="rounded-circle" />
+          <i class="fas fa-user-circle" style="font-size: 32px; color: #00f5c9;"></i>
         </button>
         <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="profileDropdown">
           <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fas fa-user me-2"></i>Profile</a></li>
@@ -365,9 +370,10 @@
       const wrapper = document.createElement('div');
       wrapper.classList.add('message-wrapper', sender);
 
-      const avatar = document.createElement('img');
-      avatar.src = sender === 'user' ? '{% static "media/my_pic.png" %}' : '{% static "media/gpt.png" %}';
+      const avatar = document.createElement('div');
       avatar.classList.add('avatar');
+      avatar.innerHTML = sender === 'user' ? '👤' : '🤖';
+      avatar.style.cssText = 'display: flex; align-items: center; justify-content: center; font-size: 24px;';
 
       const bubble = document.createElement('div');
       bubble.classList.add('message-bubble');
@@ -383,9 +389,10 @@
       const wrapper = document.createElement('div');
       wrapper.classList.add('message-wrapper', 'bot');
 
-      const avatar = document.createElement('img');
-      avatar.src = '{% static "media/gpt.png" %}';
+      const avatar = document.createElement('div');
       avatar.classList.add('avatar');
+      avatar.innerHTML = '🤖';
+      avatar.style.cssText = 'display: flex; align-items: center; justify-content: center; font-size: 24px;';
 
       const bubble = document.createElement('div');
       bubble.classList.add('message-bubble', 'typing-animation');

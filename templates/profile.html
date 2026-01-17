@@ -97,7 +97,9 @@
 <div class="profile-wrapper">
   <div class="profile-card">
     <div class="profile-header">
-      <img src="{% static 'media/my_pic.png' %}" alt="Profile Picture" width="120" height="120">
+      <div class="profile-icon-wrapper">
+        <i class="fas fa-user-circle" style="font-size: 120px; color: #00f5c9;"></i>
+      </div>
       <h3>{{ user.get_full_name }}</h3>
       <p>{{ user.email }}</p>
     </div>

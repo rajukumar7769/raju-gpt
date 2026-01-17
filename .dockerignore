@@ -1,4 +1,21 @@
-# Ignore Python
+myenv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*.log
+django_cache/
+staticfiles/
+LLm_models/
+raju-gpt-space/
+test_*.py
+upload_to_hf.py
+upload_v2.py
+SECURITY_*.md
+verify_*.py
+*.ipynb
+*.DS_Store# Ignore Python
 __pycache__/
 *.py[cod]
 *.pyc

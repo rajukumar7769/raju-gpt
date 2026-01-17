@@ -19,6 +19,9 @@ django_cache/
 media/
 staticfiles/
 
+# Ignore any media checked into static
+static/media/
+
 # Virtual Environment
 myenv/
 venv/
@@ -28,6 +31,15 @@ ENV/
 # IDE
 .vscode/
 .idea/
+
+# Non-runtime artifacts (do not deploy to Spaces)
+SECURITY_*.md
+verify_*.py
+upload_to_hf.py
+upload_v2.py
+test_*.py
+raju-gpt-space/
+LLm_models/
 *.swp
 *.swo
 *~

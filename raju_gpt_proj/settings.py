@@ -58,6 +58,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'gpt_app.middleware.DailyUsageLimitMiddleware',
 ]
 
 ROOT_URLCONF = 'raju_gpt_proj.urls'

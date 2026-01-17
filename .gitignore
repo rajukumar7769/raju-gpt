@@ -40,6 +40,10 @@ upload_v2.py
 test_*.py
 raju-gpt-space/
 LLm_models/
+
+# Ignore all Markdown docs except the main README
+*.md
+!README.md
 *.swp
 *.swo
 *~

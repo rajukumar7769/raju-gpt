@@ -112,6 +112,18 @@
         <li><strong>Last Login:</strong> <span>{{ user.last_login|date:"F j, Y, g:i a" }}</span></li>
       </ul>
     </div>
+    
+    <hr style="border-color: rgba(255,255,255,0.15)" />
+    
+    <div class="profile-section">
+      <h5><i class="fas fa-chart-line me-2"></i>Usage Statistics</h5>
+      <ul class="profile-list">
+        <li><strong>Today's Chats:</strong> <span class="badge bg-primary">{{ today_chats }}</span></li>
+        <li><strong>Total Chats:</strong> <span class="badge bg-success">{{ total_chats }}</span></li>
+        <li><strong>Preferred Theme:</strong> <span class="text-capitalize">{{ profile.theme }}</span></li>
+        <li><strong>Last Activity:</strong> <span>{{ profile.last_activity|date:"F j, Y, g:i a" }}</span></li>
+      </ul>
+    </div>
   </div>
 </div>
 <!-- Footer -->

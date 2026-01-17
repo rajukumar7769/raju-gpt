@@ -225,11 +225,27 @@ def get_response(request):
             
             # Step 8: Save to database
             print(f"\n💾 Step 8: Saving to database...")
+            
+            # Generate session_id (use date for simple grouping)
+            session_id = timezone.now().strftime('%Y-%m-%d')
+            
             Chat_data.objects.create(
                 user=request.user,
                 user_message=message,
-                bot_response=response
+                bot_response=response,
+                session_id=session_id
             )
+            
+            # Update user profile stats
+            try:
+                from .models import UserProfile
+                profile, created = UserProfile.objects.get_or_create(user=request.user)
+                profile.total_chats += 1
+                profile.daily_chat_count += 1
+                profile.save()
+            except Exception as e:
+                print(f"⚠️ Profile update failed: {str(e)}")
+            
             print(f"✅ Saved to database")
             
             print(f"\n{'='*70}")
@@ -311,6 +327,32 @@ def clear_chat(request):
         return JsonResponse({'status': 'cleared'})
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
+
+@login_required
+def export_chat_as_json(request):
+    """Export chat history as JSON file"""
+    chat_history = Chat_data.objects.filter(user=request.user).order_by('-timestamp')[:100]
+    
+    data = {
+        'user': request.user.username,
+        'export_date': timezone.now().isoformat(),
+        'total_chats': chat_history.count(),
+        'chats': [
+            {
+                'timestamp': chat.timestamp.isoformat(),
+                'user_message': chat.user_message,
+                'bot_response': chat.bot_response,
+                'session_id': chat.session_id
+            }
+            for chat in reversed(chat_history)
+        ]
+    }
+    
+    response = JsonResponse(data)
+    response['Content-Disposition'] = f'attachment; filename="chat_history_{request.user.username}.json"'
+    return response
+
+
 @login_required
 def export_chat_as_pdf(request):
     response = HttpResponse(content_type='application/pdf')
@@ -368,6 +410,10 @@ def register_user(request):
             last_name=last_name
         )
         user.save()
+        
+        # Create user profile
+        from .models import UserProfile
+        UserProfile.objects.create(user=user)
 
         messages.success(request, "Registration successful. Please login.")
         return redirect('login')
@@ -404,12 +450,56 @@ def logout_user(request):
 @login_required
 def profile(request):
     user = request.user
-    return render(request, 'profile.html', {'user': user,'now': timezone.now(),})
+    
+    # Get or create user profile
+    from .models import UserProfile
+    profile, created = UserProfile.objects.get_or_create(user=user)
+    
+    # Get chat stats
+    total_chats = Chat_data.objects.filter(user=user).count()
+    
+    # Get today's chat count
+    from datetime import date
+    today = date.today()
+    today_chats = Chat_data.objects.filter(
+        user=user,
+        timestamp__date=today
+    ).count()
+    
+    context = {
+        'user': user,
+        'profile': profile,
+        'total_chats': total_chats,
+        'today_chats': today_chats,
+        'now': timezone.now(),
+    }
+    
+    return render(request, 'profile.html', context)
 
 @login_required
 def settings(request):
     user = request.user
-    return render(request, 'settings.html', {'user': user,'now': timezone.now(),})
+    
+    # Get or create user profile
+    from .models import UserProfile
+    profile, created = UserProfile.objects.get_or_create(user=user)
+    
+    if request.method == 'POST':
+        # Handle theme change
+        theme = request.POST.get('theme')
+        if theme in ['light', 'dark']:
+            profile.theme = theme
+            profile.save()
+            messages.success(request, f"Theme changed to {theme} mode.")
+            return redirect('settings')
+    
+    context = {
+        'user': user,
+        'profile': profile,
+        'now': timezone.now(),
+    }
+    
+    return render(request, 'settings.html', context)
 
 @login_required
 def upgrade_plan(request):
@@ -457,3 +547,13 @@ def healthz(request):
         return JsonResponse({"status": "ok"})
     except Exception as e:
         return JsonResponse({"status": "error", "detail": str(e)}, status=500)
+
+# Custom error handlers
+def custom_404(request, exception=None):
+    """Custom 404 error page"""
+    return render(request, '404.html', status=404)
+
+
+def custom_500(request):
+    """Custom 500 error page"""
+    return render(request, '500.html', status=500)

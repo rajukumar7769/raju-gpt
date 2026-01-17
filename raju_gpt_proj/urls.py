@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
 
 admin.site.site_header = "RAJU-GPT Admin"
 admin.site.site_title = "RAJU-GPT Admin Portal"
@@ -25,3 +26,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('gpt_app.urls')), 
 ]
+
+# Custom error handlers
+handler404 = 'gpt_app.views.custom_404'
+handler500 = 'gpt_app.views.custom_500'

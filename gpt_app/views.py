@@ -20,6 +20,11 @@ from .config import SERPAPI_KEY
 import requests
 
 warnings.filterwarnings("ignore")
+
+# Disable torch.compile to avoid issues with older PyTorch versions
+import os
+os.environ['TORCH_COMPILE_DISABLE'] = '1'
+
 # Use GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -75,20 +80,43 @@ def get_model_and_tokenizer():
     print(f"📦 Model: {model_id}")
     print("⏳ Step 1/2: Loading tokenizer...")
     
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-    print("✅ Tokenizer loaded!")
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+        print("✅ Tokenizer loaded!")
+    except Exception as e:
+        print(f"❌ Tokenizer loading failed: {str(e)}")
+        raise
     
     print("⏳ Step 2/2: Downloading and loading model (~2.2GB)...")
     print("💡 This is downloading from HuggingFace Hub - please wait...")
     
-    model = AutoModelForCausalLM.from_pretrained(
-                                                model_id,
-                                                torch_dtype=torch.float32,
-                                                trust_remote_code=True,
-                                                use_safetensors=True
-                                            ).to(device)
+    try:
+        # Disable torch.compile to avoid compatibility issues
+        os.environ['TORCH_COMPILE_DISABLE'] = '1'
+        
+        model = AutoModelForCausalLM.from_pretrained(
+                                                    model_id,
+                                                    torch_dtype=torch.float32,
+                                                    trust_remote_code=True,
+                                                    use_safetensors=True,
+                                                    load_in_4bit=False  # Disable 4bit to avoid compilation issues
+                                                ).to(device)
+        print("✅ Model loaded successfully!")
+    except Exception as e:
+        print(f"❌ Model loading failed: {str(e)}")
+        # Try without 4bit loading
+        try:
+            print("⏳ Retrying model loading without advanced features...")
+            model = AutoModelForCausalLM.from_pretrained(
+                                                        model_id,
+                                                        torch_dtype=torch.float32,
+                                                        trust_remote_code=True
+                                                    ).to(device)
+            print("✅ Model loaded with fallback settings!")
+        except Exception as e2:
+            print(f"❌ Model loading failed on retry: {str(e2)}")
+            raise
     
-    print("✅ Model loaded successfully!")
     print("💾 Caching for future use...")
     
     # Cache in Django

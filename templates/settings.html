@@ -160,6 +160,24 @@
 
       <hr />
 
+      <!-- Theme Preference -->
+      <h5 class="mb-3 text-info"><i class="fas fa-palette me-2"></i>Appearance</h5>
+      
+      <div class="mb-3">
+        <label for="theme" class="form-label">Theme Preference</label>
+        <select class="form-control" id="theme" name="theme" onchange="document.getElementById('themeForm').submit()">
+          <option value="light" {% if profile.theme == 'light' %}selected{% endif %}>
+            <i class="fas fa-sun me-2"></i>Light Mode
+          </option>
+          <option value="dark" {% if profile.theme == 'dark' %}selected{% endif %}>
+            <i class="fas fa-moon me-2"></i>Dark Mode
+          </option>
+        </select>
+        <small class="text-muted d-block mt-2">Changes apply immediately</small>
+      </div>
+
+      <hr />
+
       <!-- Password Section -->
       <h5 class="mb-3 text-danger">Change Password</h5>
 

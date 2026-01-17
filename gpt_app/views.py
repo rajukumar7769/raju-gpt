@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import update_session_auth_hash
 from django.contrib import auth
 from django.contrib.auth.models import User
+from django.db.models import Count, Min, Max
 from reportlab.pdfgen import canvas
 from gpt_app.models import Chat_data
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM,AutoModelForCausalLM
@@ -329,6 +330,43 @@ def clear_chat(request):
 
 
 @login_required
+def clear_session(request):
+    """Clear chat history for a specific session/date"""
+    if request.method == 'POST':
+        session_id = request.POST.get('session_id')
+        if session_id:
+            Chat_data.objects.filter(user=request.user, session_id=session_id).delete()
+            return JsonResponse({'status': 'session_cleared', 'session_id': session_id})
+        return JsonResponse({'error': 'session_id required'}, status=400)
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+@login_required
+def get_sessions(request):
+    """Get all conversation sessions grouped by date"""
+    from datetime import date, timedelta
+    
+    sessions = Chat_data.objects.filter(
+        user=request.user
+    ).values('session_id').annotate(
+        message_count=Count('id'),
+        first_message=Min('timestamp'),
+        last_message=Max('timestamp')
+    ).order_by('-last_message')
+    
+    result = []
+    for session in sessions:
+        result.append({
+            'session_id': session['session_id'],
+            'message_count': session['message_count'],
+            'first_message': session['first_message'].isoformat() if session['first_message'] else None,
+            'last_message': session['last_message'].isoformat() if session['last_message'] else None,
+        })
+    
+    return JsonResponse({'sessions': result})
+
+
+@login_required
 def export_chat_as_json(request):
     """Export chat history as JSON file"""
     chat_history = Chat_data.objects.filter(user=request.user).order_by('-timestamp')[:100]
@@ -446,6 +484,74 @@ def login_user(request):
 def logout_user(request):
     logout(request)
     return redirect('login')
+
+
+def forgot_password(request):
+    """Display forgot password form"""
+    return render(request, 'forgot_password.html')
+
+
+def reset_password(request):
+    """Handle password reset request"""
+    if request.method == 'POST':
+        email = request.POST.get('email', '').strip()
+        try:
+            user = User.objects.get(email=email)
+            # Generate reset token
+            from django.contrib.auth.tokens import default_token_generator
+            token = default_token_generator.make_token(user)
+            
+            # Store token in cache for 30 minutes
+            cache.set(f'reset_token_{user.id}', token, timeout=1800)
+            
+            messages.success(request, 'If an account with this email exists, you will receive a password reset link.')
+            return redirect('login')
+        except User.DoesNotExist:
+            messages.success(request, 'If an account with this email exists, you will receive a password reset link.')
+            return redirect('login')
+    
+    return render(request, 'forgot_password.html')
+
+
+def reset_password_confirm(request, uid, token):
+    """Confirm and process password reset"""
+    try:
+        user_id = int(uid)
+        user = User.objects.get(id=user_id)
+        
+        # Verify token
+        from django.contrib.auth.tokens import default_token_generator
+        if not default_token_generator.check_token(user, token):
+            messages.error(request, 'Invalid or expired reset link.')
+            return redirect('login')
+        
+        if request.method == 'POST':
+            password = request.POST.get('password', '')
+            confirm_password = request.POST.get('confirm_password', '')
+            
+            if password != confirm_password:
+                messages.error(request, 'Passwords do not match.')
+                return render(request, 'reset_password_confirm.html', {'uid': uid, 'token': token})
+            
+            if len(password) < 6:
+                messages.error(request, 'Password must be at least 6 characters.')
+                return render(request, 'reset_password_confirm.html', {'uid': uid, 'token': token})
+            
+            user.set_password(password)
+            user.save()
+            
+            # Clear cached token
+            cache.delete(f'reset_token_{user.id}')
+            
+            messages.success(request, 'Password reset successful. Please login.')
+            return redirect('login')
+        
+        return render(request, 'reset_password_confirm.html', {'uid': uid, 'token': token})
+    
+    except (ValueError, User.DoesNotExist):
+        messages.error(request, 'Invalid reset link.')
+        return redirect('login')
+
 
 @login_required
 def profile(request):

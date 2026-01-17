@@ -148,9 +148,16 @@ def get_response(request):
             # Parse request
             data = json.loads(request.body)
             message = data.get("message", "").strip()
-            
+
+            # Basic validation
             if not message:
                 return JsonResponse({'error': 'Message cannot be empty'}, status=400)
+            if len(message) > 1000:
+                message = message[:1000]
+
+            # Simple per-user rate limiting
+            if _rate_limited(request.user.id):
+                return JsonResponse({'error': 'Too many requests. Please wait a moment and try again.'}, status=429)
             
             print(f"\n{'='*70}")
             print(f"📨 NEW CHAT REQUEST")
@@ -297,6 +304,13 @@ def get_chat_history(request):
 
 
 # PDF Export of chat history
+@login_required
+def clear_chat(request):
+    if request.method == 'POST':
+        Chat_data.objects.filter(user=request.user).delete()
+        return JsonResponse({'status': 'cleared'})
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
 @login_required
 def export_chat_as_pdf(request):
     response = HttpResponse(content_type='application/pdf')

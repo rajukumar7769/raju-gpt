@@ -231,6 +231,7 @@
     <h3 class="text-center fw-bold m-0">RAJU-GPT</h3>
     <div class="d-flex align-items-center gap-3">
       <button id="export-btn" class="btn btn-outline-success" title="Export chat"><i class="fas fa-download"></i></button>
+      <button id="clear-btn" class="btn btn-outline-danger" title="Clear chat"><i class="fas fa-trash"></i></button>
 
       <!-- Profile Dropdown -->
       <div class="dropdown">
@@ -316,6 +317,36 @@
       });
     };
 
+    // CSRF helper
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+
+    async function loadHistory() {
+      try {
+        const res = await fetch('/chat-history/');
+        if (!res.ok) return;
+        const data = await res.json();
+        (data.items || []).forEach(item => {
+          if (item.user_message) appendMessage('user', item.user_message);
+          if (item.bot_response) appendMessage('bot', item.bot_response);
+        });
+      } catch (_) {}
+    }
+
+    document.addEventListener('DOMContentLoaded', loadHistory);
+
     function scrollToBottom() {
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
@@ -385,22 +416,6 @@
       sendBtn.disabled = true;
       sendBtn.innerHTML = '⏳ Sending...';
       
-      // Get CSRF token from cookie
-      function getCookie(name) {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== '') {
-          const cookies = document.cookie.split(';');
-          for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-              cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-              break;
-            }
-          }
-        }
-        return cookieValue;
-      }
-      
       const csrftoken = getCookie('csrftoken');
       
       // Create abort controller for timeout
@@ -448,6 +463,8 @@
         let errorMsg = '';
         if (err.name === 'AbortError') {
           errorMsg = '⏱️ Request timeout (120s) - The model took too long to respond. Try a simpler question.';
+        } else if ((err.message || '').includes('HTTP 429')) {
+          errorMsg = '🚦 Too many requests. Please wait a moment and try again.';
         } else {
           errorMsg = `❌ Error: ${err.message}`;
         }
@@ -488,9 +505,21 @@
     };
 
     recognition.onerror = () => {
-      micBtn.innerHTML = `<i class="fas fa-microphone"></i>`;
+      micBtn.innerHTML = `<i class=\"fas fa-microphone\"></i>`;
       recognizing = false;
     };
+
+    document.getElementById('clear-btn').addEventListener('click', async () => {
+      if (!confirm('Clear your chat history?')) return;
+      try {
+        const csrftoken = getCookie('csrftoken');
+        const res = await fetch('/clear-chat/', { method: 'POST', headers: { 'X-CSRFToken': csrftoken }});
+        if (res.ok) {
+          messagesContainer.innerHTML = '';
+          appendMessage('bot', 'Chat history cleared.');
+        }
+      } catch (_) {}
+    });
 
     document.getElementById('export-btn').addEventListener('click', () => {
       const messages = document.querySelectorAll('#messages .message-wrapper');

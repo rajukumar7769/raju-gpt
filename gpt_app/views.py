@@ -1074,8 +1074,8 @@ def search_conversations(request):
                 user=request.user,
                 is_deleted=False
             ).filter(
-                models.Q(user_message__icontains=query) |
-                models.Q(bot_response__icontains=query)
+                Q(user_message__icontains=query) |
+                Q(bot_response__icontains=query)
             ).values(
                 'id', 'user_message', 'bot_response', 'timestamp', 'conversation_id'
             )[:20]

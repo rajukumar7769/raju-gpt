@@ -140,64 +140,131 @@ def search_web(query):
 @csrf_exempt
 @login_required
 def get_response(request):
+    """
+    Chat endpoint - receives user message and returns AI response
+    """
     if request.method == 'POST':
-        data = json.loads(request.body)
-        message = data.get("message", "")
-
-        
-        context = search_web(message)
-
-        prompt = (
-            "You are RAJU-GPT, a helpful, informative, and polite assistant developed using generative AI. "
-            "Use the following web context to answer the user's query.\n\n"
-            f"Context:\n{context}\n\n"
-            f"Question: {message}\n\n"
-            "Answer:"
-        )
-
         try:
-            print(f"📨 Received message: {message}")
-            print(f"🔄 Getting model and tokenizer...")
+            # Parse request
+            data = json.loads(request.body)
+            message = data.get("message", "").strip()
             
-            # Lazy load model on first request
+            if not message:
+                return JsonResponse({'error': 'Message cannot be empty'}, status=400)
+            
+            print(f"\n{'='*70}")
+            print(f"📨 NEW CHAT REQUEST")
+            print(f"{'='*70}")
+            print(f"Message: {message}")
+            print(f"User: {request.user.username}")
+            
+            # Step 1: Get web context
+            print(f"\n🔍 Step 1: Fetching web context...")
+            context = search_web(message)
+            print(f"✅ Context retrieved: {len(context)} chars")
+            
+            # Step 2: Build prompt
+            print(f"\n📝 Step 2: Building prompt...")
+            prompt = (
+                "You are RAJU-GPT, a helpful, informative, and polite assistant developed using generative AI. "
+                "Use the following web context to answer the user's query.\n\n"
+                f"Context:\n{context}\n\n"
+                f"Question: {message}\n\n"
+                "Answer:"
+            )
+            print(f"✅ Prompt built: {len(prompt)} chars")
+            
+            # Step 3: Load model
+            print(f"\n🤖 Step 3: Loading model and tokenizer...")
             tokenizer, model = get_model_and_tokenizer()
+            print(f"✅ Model ready")
             
-            print(f"✅ Model ready. Tokenizing prompt...")
+            # Step 4: Tokenize
+            print(f"\n🔤 Step 4: Tokenizing input...")
             inputs = tokenizer(prompt, return_tensors="pt").to(device)
-            print(f"✅ Tokenized. Generating response...")
-
+            input_length = inputs['input_ids'].shape[1]
+            print(f"✅ Tokenized: {input_length} tokens")
+            
+            # Step 5: Generate response
+            print(f"\n⚙️ Step 5: Generating response (max 300 tokens)...")
             with torch.no_grad():
                 outputs = model.generate(
                     **inputs,
                     max_new_tokens=300,
+                    do_sample=True,
                     temperature=0.7,
                     top_p=0.9,
                     repetition_penalty=1.2,
-                    early_stopping=True
+                    num_return_sequences=1,
+                    pad_token_id=tokenizer.eos_token_id,
                 )
-
-            print(f"✅ Generated. Decoding response...")
+            print(f"✅ Generation complete")
+            
+            # Step 6: Decode
+            print(f"\n📖 Step 6: Decoding output...")
             decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
-            print(f"✅ Decoded response length: {len(decoded)}")
-
-            # Extract just the response part (after the prompt)
+            print(f"✅ Decoded: {len(decoded)} chars")
+            
+            # Step 7: Extract response
+            print(f"\n✂️ Step 7: Extracting response...")
             if prompt in decoded:
                 response = decoded.split(prompt)[-1].strip()
             else:
-                response = decoded[len(prompt):].strip()
+                response = decoded[len(prompt):].strip() if len(decoded) > len(prompt) else decoded.strip()
             
+            # Clean up response
+            response = response[:1000] if len(response) > 1000 else response  # Limit to 1000 chars
             print(f"✅ Final response: {response[:100]}...")
+            
+            # Step 8: Save to database
+            print(f"\n💾 Step 8: Saving to database...")
+            Chat_data.objects.create(
+                user=request.user,
+                user_message=message,
+                bot_response=response
+            )
+            print(f"✅ Saved to database")
+            
+            print(f"\n{'='*70}")
+            print(f"✅ CHAT REQUEST COMPLETED SUCCESSFULLY")
+            print(f"{'='*70}\n")
+            
+            return JsonResponse({
+                'response': response,
+                'status': 'success'
+            })
 
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON Decode Error: {str(e)}")
+            return JsonResponse({
+                'error': 'Invalid JSON format',
+                'status': 'error'
+            }, status=400)
+        
         except Exception as e:
-            print(f"❌ Error in get_response: {str(e)}")
+            print(f"\n❌ ERROR IN GET_RESPONSE")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
             import traceback
             print(traceback.format_exc())
-            response = f"Error: {str(e)}"
-
-        # Save the chat data to the database
-        Chat_data.objects.create(user=request.user, user_message=message, bot_response=response)
-
-        return JsonResponse({'response': response})
+            
+            # Try to save error to database
+            try:
+                Chat_data.objects.create(
+                    user=request.user,
+                    user_message=message if 'message' in locals() else 'ERROR',
+                    bot_response=f'Error: {str(e)}'
+                )
+            except:
+                pass
+            
+            return JsonResponse({
+                'error': f'Server error: {str(e)}',
+                'status': 'error'
+            }, status=500)
+    
+    else:
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 
 

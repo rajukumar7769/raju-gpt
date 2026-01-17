@@ -57,4 +57,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=600s --retries=3 \
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
-CMD ["gunicorn", "raju_gpt_proj.wsgi:application", "--bind", "0.0.0.0:7860", "--workers", "2", "--timeout", "600"]
+CMD ["gunicorn", "raju_gpt_proj.wsgi:application", "--bind", "0.0.0.0:7860", "--workers", "1", "--threads", "4", "--worker-class", "gthread", "--timeout", "300", "--keep-alive", "5"]

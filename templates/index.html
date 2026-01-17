@@ -364,8 +364,26 @@
     sendBtn.onclick = () => {
       const message = userInput.value.trim();
       if (!message) return;
+      
       appendMessage('user', message);
       userInput.value = '';
+      
+      // Show loading indicator
+      const loadingMsg = document.createElement('div');
+      loadingMsg.className = 'message-wrapper bot';
+      loadingMsg.innerHTML = `
+        <div class="avatar">🤖</div>
+        <div class="message-bubble typing-animation">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>
+      `;
+      const messagesContainer = document.getElementById('messages');
+      messagesContainer.appendChild(loadingMsg);
+      scrollToBottom();
+      
+      // Disable send button
+      sendBtn.disabled = true;
+      sendBtn.innerHTML = '⏳ Sending...';
       
       // Get CSRF token from cookie
       function getCookie(name) {
@@ -385,32 +403,61 @@
       
       const csrftoken = getCookie('csrftoken');
       
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+      
       fetch('/get-response/', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'X-CSRFToken': csrftoken
         },
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message }),
+        signal: controller.signal
       })
       .then(res => {
+        clearTimeout(timeoutId);
         console.log('Response status:', res.status);
         if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         }
         return res.json();
       })
       .then(data => {
         console.log('Response data:', data);
+        
+        // Remove loading indicator
+        loadingMsg.remove();
+        
         if (data.response) {
           simulateTyping(data.response);
+        } else if (data.error) {
+          appendMessage('bot', `❌ Error: ${data.error}`);
         } else {
-          appendMessage('bot', 'Error: No response received');
+          appendMessage('bot', '❌ No response received from server');
         }
       })
       .catch(err => {
+        clearTimeout(timeoutId);
         console.error('Error:', err);
-        appendMessage('bot', `Error: ${err.message}`);
+        
+        // Remove loading indicator
+        loadingMsg.remove();
+        
+        let errorMsg = '';
+        if (err.name === 'AbortError') {
+          errorMsg = '⏱️ Request timeout (120s) - The model took too long to respond. Try a simpler question.';
+        } else {
+          errorMsg = `❌ Error: ${err.message}`;
+        }
+        
+        appendMessage('bot', errorMsg);
+      })
+      .finally(() => {
+        // Re-enable send button
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = '📤 Send';
       });
     };
 

@@ -56,24 +56,9 @@ def get_model_and_tokenizer():
     
     print("🔍 Checking cache for model and tokenizer...")
     
-    # Check global variables first (fastest)
+    # Check global variables first (fastest) - this is the only caching we use
     if _tokenizer is not None and _model is not None:
         print("✅ Using global cached model")
-        return _tokenizer, _model
-    
-    # Check Django cache
-    tokenizer = cache.get("custom_tokenizer")
-    model = cache.get("custom_model")
-    
-    if tokenizer is not None and model is not None:
-        print("✅ Using Django cached model")
-        _tokenizer = tokenizer
-        _model = model
-        return tokenizer, model
-    
-    # Check global variables
-    if _tokenizer is not None and _model is not None:
-        print("✅ Using global model")
         return _tokenizer, _model
     
     print("📥 Loading model for the first time (this may take 5-10 minutes)...")
@@ -117,13 +102,9 @@ def get_model_and_tokenizer():
             print(f"❌ Model loading failed on retry: {str(e2)}")
             raise
     
-    print("💾 Caching for future use...")
+    print("💾 Caching in memory for future use...")
     
-    # Cache in Django
-    cache.set("custom_tokenizer", tokenizer, None)
-    cache.set("custom_model", model, None)
-    
-    # Store globally
+    # Store globally (only caching method)
     _tokenizer = tokenizer
     _model = model
     

@@ -84,12 +84,40 @@ WSGI_APPLICATION = 'raju_gpt_proj.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Database persistence for HF Spaces
+# Priority:
+# 1. If /data exists (HF Spaces persistent storage) → use that
+# 2. If DATABASE_URL set (PostgreSQL) → use that
+# 3. Otherwise → use local SQLite
+
+if os.path.exists('/data'):
+    # HF Spaces persistent storage
+    print("✅ Database: Using HF Spaces persistent storage (/data)")
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': '/data/db.sqlite3',
+        }
     }
-}
+elif config('DATABASE_URL', default=''):
+    # External PostgreSQL database
+    print("✅ Database: Using external PostgreSQL")
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.config(
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
+else:
+    # Local development SQLite
+    print("ℹ️  Database: Using local development database")
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 CACHES = {
     'default': {
@@ -150,14 +178,6 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ==================== PRODUCTION SETTINGS ====================
-
-# Database URL support for production (PostgreSQL, etc.)
-import dj_database_url
-if config('DATABASE_URL', default=''):
-    DATABASES['default'] = dj_database_url.config(
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
 
 # Production-specific configurations
 if not DEBUG:

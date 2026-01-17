@@ -16,5 +16,7 @@ urlpatterns = [
     path('upgrade-plan/', views.upgrade_plan, name='upgrade_plan'),
     path('settings/update/', views.update_profile, name='update_profile'),
     path('healthz/', views.healthz, name='healthz'),
-
+    # Avatar endpoints
+    path('avatar/<str:username>/', views.user_avatar, name='user_avatar'),
+    path('avatar/bot/logo/', views.bot_avatar, name='bot_avatar'),
 ]

@@ -557,3 +557,26 @@ def custom_404(request, exception=None):
 def custom_500(request):
     """Custom 500 error page"""
     return render(request, '500.html', status=500)
+
+
+# Avatar endpoints
+def user_avatar(request, username):
+    """Serve user avatar as SVG"""
+    from .avatar_utils import generate_avatar_svg
+    
+    try:
+        user = User.objects.get(username=username)
+        svg = generate_avatar_svg(user.get_full_name(), user.username)
+        return HttpResponse(svg, content_type='image/svg+xml')
+    except User.DoesNotExist:
+        # Return default avatar
+        svg = generate_avatar_svg('', username)
+        return HttpResponse(svg, content_type='image/svg+xml')
+
+
+def bot_avatar(request):
+    """Serve bot logo as SVG"""
+    from .avatar_utils import generate_bot_logo_svg
+    
+    svg = generate_bot_logo_svg()
+    return HttpResponse(svg, content_type='image/svg+xml')

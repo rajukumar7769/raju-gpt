@@ -5,7 +5,7 @@ from django.db.models import Count, Q
 from django.utils.html import format_html
 from django.utils.timezone import now
 from datetime import timedelta
-from .models import Chat, Chat_data, UserProfile
+from .models import Chat, Chat_data, UserProfile, Conversation
 
 
 class UserProfileInline(admin.StackedInline):
@@ -56,10 +56,34 @@ class ChatDataAdmin(admin.ModelAdmin):
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
     """User profile admin"""
-    list_display = ('user', 'theme', 'daily_chat_count', 'total_chats', 'last_activity')
+    list_display = ('user', 'theme', 'temperature', 'daily_chat_count', 'total_chats', 'last_activity')
     list_filter = ('theme', 'last_activity')
     search_fields = ('user__username', 'user__email')
     readonly_fields = ('last_activity', 'created_at')
+    fieldsets = (
+        ('User', {'fields': ('user',)}),
+        ('Preferences', {'fields': ('theme', 'temperature', 'top_p', 'system_prompt', 'model_name')}),
+        ('Statistics', {'fields': ('daily_chat_count', 'total_chats', 'last_activity', 'created_at')}),
+    )
+
+
+@admin.register(Conversation)
+class ConversationAdmin(admin.ModelAdmin):
+    """Conversation/Session admin"""
+    list_display = ('title', 'user', 'is_pinned', 'message_count', 'created_at', 'updated_at')
+    list_filter = ('is_pinned', 'created_at', 'updated_at')
+    search_fields = ('title', 'user__username')
+    readonly_fields = ('created_at', 'updated_at')
+    
+    def message_count(self, obj):
+        count = obj.messages.count()
+        return format_html(f'<strong>{count}</strong>')
+    message_count.short_description = 'Messages'
+    
+    fieldsets = (
+        ('Conversation Info', {'fields': ('user', 'title', 'is_pinned')}),
+        ('Metadata', {'fields': ('created_at', 'updated_at')}),
+    )
 
 
 # Register Chat model

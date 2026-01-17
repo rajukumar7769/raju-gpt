@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import update_session_auth_hash
 from django.contrib import auth
 from django.contrib.auth.models import User
-from django.db.models import Count, Min, Max
+from django.db.models import Count, Min, Max, Q
 from reportlab.pdfgen import canvas
 from gpt_app.models import Chat_data
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM,AutoModelForCausalLM
@@ -118,7 +118,7 @@ def get_model_and_tokenizer():
 @login_required(login_url='login')
 def index(request):
     chat_history = Chat_data.objects.filter(user=request.user).order_by('timestamp')
-    return render(request, 'index.html',{'chat_history': chat_history})
+    return render(request, 'index_chatgpt.html',{'chat_history': chat_history})
 
 # @login_required
 # def chatbot_view(request):
@@ -180,16 +180,28 @@ def get_response(request):
             context = search_web(message)
             print(f"✅ Context retrieved: {len(context)} chars")
             
-            # Step 2: Build prompt
+            # Step 2: Build prompt with user's system prompt
             print(f"\n📝 Step 2: Building prompt...")
+            
+            # Get user preferences
+            try:
+                profile = request.user.profile
+                system_prompt = profile.system_prompt
+                temperature = profile.temperature
+                top_p = profile.top_p
+            except:
+                system_prompt = "You are a helpful, informative, and polite assistant developed using generative AI."
+                temperature = 0.7
+                top_p = 0.9
+            
             prompt = (
-                "You are RAJU-GPT, a helpful, informative, and polite assistant developed using generative AI. "
+                f"{system_prompt}\n\n"
                 "Use the following web context to answer the user's query.\n\n"
                 f"Context:\n{context}\n\n"
                 f"Question: {message}\n\n"
                 "Answer:"
             )
-            print(f"✅ Prompt built: {len(prompt)} chars")
+            print(f"✅ Prompt built: {len(prompt)} chars (Temp: {temperature}, Top-p: {top_p})")
             
             # Step 3: Load model
             print(f"\n🤖 Step 3: Loading model and tokenizer...")
@@ -209,8 +221,8 @@ def get_response(request):
                     **inputs,
                     max_new_tokens=300,
                     do_sample=True,
-                    temperature=0.7,
-                    top_p=0.9,
+                    temperature=temperature,
+                    top_p=top_p,
                     repetition_penalty=1.2,
                     num_return_sequences=1,
                     pad_token_id=tokenizer.eos_token_id,
@@ -239,12 +251,35 @@ def get_response(request):
             # Generate session_id (use date for simple grouping)
             session_id = timezone.now().strftime('%Y-%m-%d')
             
-            Chat_data.objects.create(
+            # Get or create current conversation
+            from .models import Conversation
+            try:
+                conv = Conversation.objects.filter(user=request.user).latest('updated_at')
+                # Check if conversation is from today
+                if conv.updated_at.date() != timezone.now().date():
+                    # Create new conversation
+                    conv = Conversation.objects.create(
+                        user=request.user,
+                        title=message[:50] + "..." if len(message) > 50 else message
+                    )
+            except Conversation.DoesNotExist:
+                conv = Conversation.objects.create(
+                    user=request.user,
+                    title=message[:50] + "..." if len(message) > 50 else message
+                )
+            
+            chat = Chat_data.objects.create(
                 user=request.user,
                 user_message=message,
                 bot_response=response,
-                session_id=session_id
+                session_id=session_id,
+                conversation=conv
             )
+            
+            # Update conversation title if it's the first message
+            if conv.messages.count() == 1:
+                conv.title = message[:100] if len(message) <= 100 else message[:97] + "..."
+                conv.save()
             
             # Update user profile stats
             try:
@@ -256,7 +291,7 @@ def get_response(request):
             except Exception as e:
                 print(f"⚠️ Profile update failed: {str(e)}")
             
-            print(f"✅ Saved to database")
+            print(f"✅ Saved to database (Conv ID: {conv.id})")
             
             print(f"\n{'='*70}")
             print(f"✅ CHAT REQUEST COMPLETED SUCCESSFULLY")
@@ -264,7 +299,9 @@ def get_response(request):
             
             return JsonResponse({
                 'response': response,
-                'status': 'success'
+                'status': 'success',
+                'conversation_id': conv.id,
+                'message_id': chat.id
             })
 
         except json.JSONDecodeError as e:
@@ -566,14 +603,38 @@ def reset_password_confirm(request, uid, token):
 def profile(request):
     user = request.user
     
-    # Get or create user profile
+    # Check if AJAX request
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        from .models import UserProfile
+        profile, created = UserProfile.objects.get_or_create(user=user)
+        
+        total_chats = Chat_data.objects.filter(user=user).count()
+        
+        from datetime import date
+        today = date.today()
+        today_chats = Chat_data.objects.filter(
+            user=user,
+            timestamp__date=today
+        ).count()
+        
+        return JsonResponse({
+            'username': user.username,
+            'email': user.email,
+            'first_name': user.first_name or user.username,
+            'theme': profile.theme,
+            'total_chats': total_chats,
+            'today_chats': today_chats,
+            'temperature': profile.temperature,
+            'top_p': profile.top_p,
+            'system_prompt': profile.system_prompt,
+        })
+    
+    # Regular page request
     from .models import UserProfile
     profile, created = UserProfile.objects.get_or_create(user=user)
     
-    # Get chat stats
     total_chats = Chat_data.objects.filter(user=user).count()
     
-    # Get today's chat count
     from datetime import date
     today = date.today()
     today_chats = Chat_data.objects.filter(
@@ -591,6 +652,7 @@ def profile(request):
     
     return render(request, 'profile.html', context)
 
+@csrf_protect
 @login_required
 def settings(request):
     user = request.user
@@ -600,12 +662,35 @@ def settings(request):
     profile, created = UserProfile.objects.get_or_create(user=user)
     
     if request.method == 'POST':
-        # Handle theme change
-        theme = request.POST.get('theme')
-        if theme in ['light', 'dark']:
-            profile.theme = theme
+        # Check if JSON request
+        try:
+            data = json.loads(request.body)
+        except:
+            data = request.POST
+        
+        # Handle JSON API requests
+        if isinstance(data, dict):
+            theme = data.get('theme')
+            temperature = data.get('temperature')
+            top_p = data.get('top_p')
+            system_prompt = data.get('system_prompt')
+            
+            if theme and theme in ['light', 'dark']:
+                profile.theme = theme
+            if temperature is not None:
+                profile.temperature = float(temperature)
+            if top_p is not None:
+                profile.top_p = float(top_p)
+            if system_prompt:
+                profile.system_prompt = system_prompt
+            
             profile.save()
-            messages.success(request, f"Theme changed to {theme} mode.")
+            
+            # If JSON request, return JSON response
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'status': 'success', 'message': 'Settings saved'})
+            
+            messages.success(request, 'Settings updated successfully.')
             return redirect('settings')
     
     context = {
@@ -687,6 +772,322 @@ def user_avatar(request, username):
         # Return default avatar
         svg = generate_avatar_svg('', username)
         return HttpResponse(svg, content_type='image/svg+xml')
+
+
+# ============================================================================
+# CONVERSATION MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@csrf_protect
+@login_required
+def create_conversation(request):
+    """Create a new conversation"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            title = data.get('title', 'New Conversation').strip()
+            
+            if not title:
+                title = 'New Conversation'
+            
+            from .models import Conversation
+            conv = Conversation.objects.create(
+                user=request.user,
+                title=title
+            )
+            
+            return JsonResponse({
+                'status': 'success',
+                'id': conv.id,
+                'title': conv.title,
+                'created_at': conv.created_at.isoformat()
+            })
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'POST required'}, status=400)
+
+
+@csrf_protect
+@login_required
+def get_conversations(request):
+    """Get all conversations for the user"""
+    try:
+        from .models import Conversation
+        convs = Conversation.objects.filter(user=request.user).annotate(
+            message_count=Count('messages')
+        ).values('id', 'title', 'is_pinned', 'created_at', 'updated_at', 'message_count')
+        
+        return JsonResponse({
+            'status': 'success',
+            'conversations': list(convs)
+        }, safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_protect
+@login_required
+def delete_conversation(request, conv_id):
+    """Delete a conversation"""
+    if request.method == 'POST':
+        try:
+            from .models import Conversation
+            conv = Conversation.objects.get(id=conv_id, user=request.user)
+            conv.delete()
+            return JsonResponse({'status': 'success'})
+        except Conversation.DoesNotExist:
+            return JsonResponse({'error': 'Conversation not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'POST required'}, status=400)
+
+
+@csrf_protect
+@login_required
+def rename_conversation(request, conv_id):
+    """Rename a conversation"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            new_title = data.get('title', '').strip()
+            
+            if not new_title:
+                return JsonResponse({'error': 'Title cannot be empty'}, status=400)
+            
+            from .models import Conversation
+            conv = Conversation.objects.get(id=conv_id, user=request.user)
+            conv.title = new_title
+            conv.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'title': conv.title
+            })
+        except Conversation.DoesNotExist:
+            return JsonResponse({'error': 'Conversation not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'POST required'}, status=400)
+
+
+@csrf_protect
+@login_required
+def toggle_pin_conversation(request, conv_id):
+    """Pin or unpin a conversation"""
+    if request.method == 'POST':
+        try:
+            from .models import Conversation
+            conv = Conversation.objects.get(id=conv_id, user=request.user)
+            conv.is_pinned = not conv.is_pinned
+            conv.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'is_pinned': conv.is_pinned
+            })
+        except Conversation.DoesNotExist:
+            return JsonResponse({'error': 'Conversation not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'POST required'}, status=400)
+
+
+# ============================================================================
+# MESSAGE MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@csrf_protect
+@login_required
+def delete_message(request, msg_id):
+    """Soft delete a message"""
+    if request.method == 'POST':
+        try:
+            msg = Chat_data.objects.get(id=msg_id, user=request.user)
+            msg.is_deleted = True
+            msg.save()
+            
+            return JsonResponse({'status': 'success'})
+        except Chat_data.DoesNotExist:
+            return JsonResponse({'error': 'Message not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'POST required'}, status=400)
+
+
+@csrf_protect
+@login_required
+def edit_message(request, msg_id):
+    """Edit a message"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            new_message = data.get('message', '').strip()
+            
+            if not new_message:
+                return JsonResponse({'error': 'Message cannot be empty'}, status=400)
+            
+            msg = Chat_data.objects.get(id=msg_id, user=request.user)
+            msg.user_message = new_message
+            msg.is_edited = True
+            msg.edited_at = timezone.now()
+            msg.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': msg.user_message,
+                'edited_at': msg.edited_at.isoformat()
+            })
+        except Chat_data.DoesNotExist:
+            return JsonResponse({'error': 'Message not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'POST required'}, status=400)
+
+
+@csrf_protect
+@login_required
+def regenerate_response(request, msg_id):
+    """Regenerate AI response for a message"""
+    if request.method == 'POST':
+        try:
+            msg = Chat_data.objects.get(id=msg_id, user=request.user)
+            
+            # Rate limiting check
+            if _rate_limited(request.user.id):
+                return JsonResponse({'error': 'Too many requests. Please wait.'}, status=429)
+            
+            # Get user preferences
+            try:
+                profile = request.user.profile
+                temperature = profile.temperature
+                system_prompt = profile.system_prompt
+            except:
+                temperature = 0.7
+                system_prompt = "You are a helpful AI assistant."
+            
+            # Get web context
+            context = search_web(msg.user_message)
+            
+            # Build prompt
+            prompt = (
+                f"{system_prompt}\n\n"
+                f"Context:\n{context}\n\n"
+                f"Question: {msg.user_message}\n\n"
+                "Answer:"
+            )
+            
+            # Load model
+            tokenizer, model = get_model_and_tokenizer()
+            
+            # Generate
+            inputs = tokenizer(prompt, return_tensors="pt").to(device)
+            
+            with torch.no_grad():
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=300,
+                    do_sample=True,
+                    temperature=temperature,
+                    top_p=0.9,
+                    repetition_penalty=1.2,
+                    num_return_sequences=1,
+                    pad_token_id=tokenizer.eos_token_id,
+                )
+            
+            decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            
+            if prompt in decoded:
+                new_response = decoded.split(prompt)[-1].strip()
+            else:
+                new_response = decoded[len(prompt):].strip() if len(decoded) > len(prompt) else decoded.strip()
+            
+            new_response = new_response[:1000] if len(new_response) > 1000 else new_response
+            
+            # Update message
+            msg.bot_response = new_response
+            msg.regeneration_count += 1
+            msg.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'response': new_response,
+                'regeneration_count': msg.regeneration_count
+            })
+        except Chat_data.DoesNotExist:
+            return JsonResponse({'error': 'Message not found'}, status=404)
+        except Exception as e:
+            print(f"❌ Regenerate error: {str(e)}")
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'POST required'}, status=400)
+
+
+@login_required
+def get_conversation_messages(request, conv_id):
+    """Get all messages in a conversation"""
+    try:
+        from .models import Conversation
+        conv = Conversation.objects.get(id=conv_id, user=request.user)
+        
+        messages = Chat_data.objects.filter(
+            conversation=conv,
+            is_deleted=False
+        ).values(
+            'id', 'user_message', 'bot_response', 'timestamp', 
+            'is_edited', 'edited_at', 'regeneration_count'
+        ).order_by('timestamp')
+        
+        return JsonResponse({
+            'status': 'success',
+            'conversation': {
+                'id': conv.id,
+                'title': conv.title,
+                'is_pinned': conv.is_pinned,
+            },
+            'messages': list(messages)
+        }, safe=False)
+    except Conversation.DoesNotExist:
+        return JsonResponse({'error': 'Conversation not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_protect
+@login_required
+def search_conversations(request):
+    """Search across conversations and messages"""
+    if request.method == 'GET':
+        try:
+            query = request.GET.get('q', '').strip()
+            
+            if len(query) < 2:
+                return JsonResponse({'error': 'Query too short'}, status=400)
+            
+            from .models import Conversation
+            # Search in conversation titles
+            convs = Conversation.objects.filter(
+                user=request.user,
+                title__icontains=query
+            ).values('id', 'title', 'created_at')
+            
+            # Search in messages
+            messages = Chat_data.objects.filter(
+                user=request.user,
+                is_deleted=False
+            ).filter(
+                models.Q(user_message__icontains=query) |
+                models.Q(bot_response__icontains=query)
+            ).values(
+                'id', 'user_message', 'bot_response', 'timestamp', 'conversation_id'
+            )[:20]
+            
+            return JsonResponse({
+                'status': 'success',
+                'conversations': list(convs),
+                'messages': list(messages)
+            }, safe=False)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'error': 'GET required'}, status=400)
 
 
 def bot_avatar(request):

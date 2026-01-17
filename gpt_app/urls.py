@@ -24,4 +24,20 @@ urlpatterns = [
     # Avatar endpoints
     path('avatar/<str:username>/', views.user_avatar, name='user_avatar'),
     path('avatar/bot/logo/', views.bot_avatar, name='bot_avatar'),
+    
+    # Conversation Management Endpoints
+    path('conversations/create/', views.create_conversation, name='create_conversation'),
+    path('conversations/', views.get_conversations, name='get_conversations'),
+    path('conversations/<int:conv_id>/delete/', views.delete_conversation, name='delete_conversation'),
+    path('conversations/<int:conv_id>/rename/', views.rename_conversation, name='rename_conversation'),
+    path('conversations/<int:conv_id>/pin/', views.toggle_pin_conversation, name='toggle_pin_conversation'),
+    path('conversations/<int:conv_id>/messages/', views.get_conversation_messages, name='get_conversation_messages'),
+    
+    # Message Management Endpoints
+    path('messages/<int:msg_id>/delete/', views.delete_message, name='delete_message'),
+    path('messages/<int:msg_id>/edit/', views.edit_message, name='edit_message'),
+    path('messages/<int:msg_id>/regenerate/', views.regenerate_response, name='regenerate_response'),
+    
+    # Search Endpoint
+    path('search/', views.search_conversations, name='search_conversations'),
 ]

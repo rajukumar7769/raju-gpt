@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_protect
 from django.http import JsonResponse, HttpResponse
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -137,7 +137,7 @@ def search_web(query):
         print(f"⚠️ Web search error: {e}")
         return f"(Web search unavailable)"
 
-@csrf_exempt
+@csrf_protect
 @login_required
 def get_response(request):
     """
@@ -269,12 +269,31 @@ def get_response(request):
 
 
 
-# Get latest 10 messages from DB
+def _rate_limited(user_id: int, limit: int = 20, window_seconds: int = 300) -> bool:
+    """Simple per-user sliding window rate limiter using Django cache.
+    Returns True if over the limit.
+    """
+    key = f"rl:{user_id}"
+    data = cache.get(key) or {"count": 0}
+    count = int(data.get("count", 0)) + 1
+    data["count"] = count
+    # Set/refresh TTL for window
+    cache.set(key, data, timeout=window_seconds)
+    return count > limit
+
+# Get latest messages from DB as JSON
 @login_required
 def get_chat_history(request):
-    history = Chat_data.objects.filter(user=request.user).order_by('-timestamp')[:10]
-    lines = [f"User: {chat.message}\nRAJU-GPT: {chat.response}" for chat in reversed(history)]
-    return JsonResponse({'history': "\n\n".join(lines)})
+    qs = Chat_data.objects.filter(user=request.user).order_by('-timestamp')[:20]
+    items = [
+        {
+            "timestamp": chat.timestamp.isoformat(),
+            "user_message": chat.user_message,
+            "bot_response": chat.bot_response,
+        }
+        for chat in reversed(qs)
+    ]
+    return JsonResponse({'items': items})
 
 
 # PDF Export of chat history
@@ -288,9 +307,9 @@ def export_chat_as_pdf(request):
     y_position = 800
 
     for chat in reversed(chat_history):
-        p.drawString(100, y_position, f"User: {chat.message}")
+        p.drawString(100, y_position, f"User: {chat.user_message}")
         y_position -= 20
-        p.drawString(100, y_position, f"RAJU-GPT: {chat.response}")
+        p.drawString(100, y_position, f"RAJU-GPT: {chat.bot_response}")
         y_position -= 40
         if y_position < 100:
             p.showPage()
@@ -414,3 +433,13 @@ def update_profile(request):
         return redirect('settings')
 
     return render(request, 'settings.html', {'user': request.user,'now': timezone.now(),})
+
+
+# Health check endpoint
+def healthz(request):
+    try:
+        # Minimal DB ping
+        Chat_data.objects.all().count()
+        return JsonResponse({"status": "ok"})
+    except Exception as e:
+        return JsonResponse({"status": "error", "detail": str(e)}, status=500)
